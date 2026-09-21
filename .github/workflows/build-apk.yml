@@ -25,7 +25,7 @@ jobs:
 
     steps:
 
-      # 1. Download repository
+      # 1. Checkout repository
       - name: Checkout repository
         uses: actions/checkout@v4
 
@@ -133,11 +133,11 @@ jobs:
           name: website-apk
           path: app/build/outputs/apk/debug/app-debug.apk
 
-      # 11. Upload APK to Supabase Storage
+      # 11. Upload APK to Supabase
       - name: Upload APK to Supabase
         env:
           SUPABASE_URL: "https://wgylobjcxqmjsutgdhdz.supabase.co"
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          SUPABASE_SERVICE_ROLE_KEY: "sb_secret__Uqo-IS-qC99mfCEmVsCkg_Bvkqob0A"
           APP_NAME: ${{ inputs.app_name }}
         run: |
 
@@ -166,114 +166,10 @@ jobs:
 
           echo "APK uploaded successfully"
 
-      # 12. Create public download URL
+      # 12. Show APK Download URL
       - name: Show APK Download URL
         env:
           SUPABASE_URL: "https://wgylobjcxqmjsutgdhdz.supabase.co"
-          APP_NAME: ${{ inputs.app_name }}
-        run: |
-
-          SAFE_NAME=$(echo "$APP_NAME" | \
-            tr '[:upper:]' '[:lower:]' | \
-            sed 's/[^a-z0-9_-]/-/g' | \
-            sed 's/--*/-/g' | \
-            sed 's/^-//' | \
-            sed 's/-$//')
-
-          if [ -z "$SAFE_NAME" ]; then
-            SAFE_NAME="website"
-          fi
-
-          APK_NAME="${SAFE_NAME}-${GITHUB_RUN_ID}.apk"
-
-          APK_URL="${SUPABASE_URL}/storage/v1/object/public/apk-files/${APK_NAME}"
-
-          echo "======================================"
-          echo "APK DOWNLOAD URL:"
-          echo "$APK_URL"
-          echo "======================================"          import re
-          from pathlib import Path
-
-          file = Path("app/src/main/AndroidManifest.xml")
-
-          text = file.read_text()
-
-          name = os.environ["APP_NAME"]
-
-          text = re.sub(
-              r'android:label="[^"]*"',
-              'android:label="' +
-              name.replace('\\', '\\\\').replace('"', '\\"') +
-              '"',
-              text
-          )
-
-          file.write_text(text)
-          PY
-
-
-      # 8. Build APK
-      - name: Build Debug APK
-        run: |
-          gradle assembleDebug
-
-
-      # 9. Check APK
-      - name: Check APK
-        run: |
-          ls -lh app/build/outputs/apk/debug/app-debug.apk
-
-
-      # 10. Upload APK to GitHub Artifact
-      - name: Upload GitHub Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: website-apk
-          path: app/build/outputs/apk/debug/app-debug.apk
-
-
-      # 11. Upload APK to Supabase Storage
-      - name: Upload APK to Supabase
-        env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-          APP_NAME: ${{ inputs.app_name }}
-        run: |
-
-          # Make safe filename
-          SAFE_NAME=$(echo "$APP_NAME" | \
-            tr '[:upper:]' '[:lower:]' | \
-            sed 's/[^a-z0-9_-]/-/g' | \
-            sed 's/--*/-/g' | \
-            sed 's/^-//' | \
-            sed 's/-$//')
-
-          # Fallback filename
-          if [ -z "$SAFE_NAME" ]; then
-            SAFE_NAME="website"
-          fi
-
-          # Unique APK filename
-          APK_NAME="${SAFE_NAME}-${GITHUB_RUN_ID}.apk"
-
-          echo "APK name: $APK_NAME"
-
-          # Upload to Supabase Storage
-          curl --fail-with-body \
-            -X POST \
-            "${SUPABASE_URL}/storage/v1/object/apk-files/${APK_NAME}" \
-            -H "Authorization: Bearer ${SUPABASE_SERVICE_ROLE_KEY}" \
-            -H "apikey: ${SUPABASE_SERVICE_ROLE_KEY}" \
-            -H "Content-Type: application/vnd.android.package-archive" \
-            --data-binary "@app/build/outputs/apk/debug/app-debug.apk"
-
-          echo "APK uploaded successfully"
-
-
-      # 12. Create public download URL
-      - name: Show APK Download URL
-        env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           APP_NAME: ${{ inputs.app_name }}
         run: |
 
