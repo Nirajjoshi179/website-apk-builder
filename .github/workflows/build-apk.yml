@@ -9,6 +9,12 @@ on:
         default: "https://example.com"
         type: string
 
+      app_name:
+        description: "App Name"
+        required: true
+        default: "My Website"
+        type: string
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -26,7 +32,7 @@ jobs:
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '17'
+          java-version: "17"
 
       - name: Accept Android SDK Licenses
         run: |
@@ -46,7 +52,7 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: '8.7'
+          gradle-version: "8.7"
 
       - name: Set Website URL
         env:
@@ -69,6 +75,31 @@ jobs:
               'webView.loadUrl("' +
               url.replace('\\', '\\\\').replace('"', '\\"') +
               '");',
+              text
+          )
+
+          file.write_text(text)
+          PY
+
+      - name: Set App Name
+        env:
+          APP_NAME: ${{ inputs.app_name }}
+        run: |
+          python3 - <<'PY'
+          import os
+          import re
+          from pathlib import Path
+
+          file = Path("app/src/main/AndroidManifest.xml")
+
+          text = file.read_text()
+          name = os.environ["APP_NAME"]
+
+          text = re.sub(
+              r'android:label="[^"]*"',
+              'android:label="' +
+              name.replace('\\', '\\\\').replace('"', '\\"') +
+              '"',
               text
           )
 
