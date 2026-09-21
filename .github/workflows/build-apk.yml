@@ -29,14 +29,12 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-
       # 2. Java 17
       - name: Setup Java 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "17"
-
 
       # 3. Accept Android licenses
       - name: Accept Android SDK Licenses
@@ -46,7 +44,6 @@ jobs:
           echo "Using sdkmanager: $SDKMANAGER"
 
           yes | "$SDKMANAGER" --licenses > /dev/null 2>&1 || true
-
 
       # 4. Install Android SDK
       - name: Install Android SDK
@@ -59,13 +56,11 @@ jobs:
           "$SDKMANAGER" "platforms;android-35"
           "$SDKMANAGER" "build-tools;35.0.0"
 
-
       # 5. Setup Gradle
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "8.7"
-
 
       # 6. Set Website URL
       - name: Set Website URL
@@ -82,7 +77,6 @@ jobs:
           )
 
           text = file.read_text()
-
           url = os.environ["WEBSITE_URL"]
 
           text = re.sub(
@@ -96,7 +90,6 @@ jobs:
           file.write_text(text)
           PY
 
-
       # 7. Set App Name
       - name: Set App Name
         env:
@@ -105,6 +98,100 @@ jobs:
           python3 - <<'PY'
           import os
           import re
+          from pathlib import Path
+
+          file = Path("app/src/main/AndroidManifest.xml")
+
+          text = file.read_text()
+          name = os.environ["APP_NAME"]
+
+          text = re.sub(
+              r'android:label="[^"]*"',
+              'android:label="' +
+              name.replace('\\', '\\\\').replace('"', '\\"') +
+              '"',
+              text
+          )
+
+          file.write_text(text)
+          PY
+
+      # 8. Build APK
+      - name: Build Debug APK
+        run: |
+          gradle assembleDebug
+
+      # 9. Check APK
+      - name: Check APK
+        run: |
+          ls -lh app/build/outputs/apk/debug/app-debug.apk
+
+      # 10. Upload APK to GitHub Artifact
+      - name: Upload GitHub Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: website-apk
+          path: app/build/outputs/apk/debug/app-debug.apk
+
+      # 11. Upload APK to Supabase Storage
+      - name: Upload APK to Supabase
+        env:
+          SUPABASE_URL: "https://wgylobjcxqmjsutgdhdz.supabase.co"
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          APP_NAME: ${{ inputs.app_name }}
+        run: |
+
+          SAFE_NAME=$(echo "$APP_NAME" | \
+            tr '[:upper:]' '[:lower:]' | \
+            sed 's/[^a-z0-9_-]/-/g' | \
+            sed 's/--*/-/g' | \
+            sed 's/^-//' | \
+            sed 's/-$//')
+
+          if [ -z "$SAFE_NAME" ]; then
+            SAFE_NAME="website"
+          fi
+
+          APK_NAME="${SAFE_NAME}-${GITHUB_RUN_ID}.apk"
+
+          echo "APK name: $APK_NAME"
+
+          curl --fail-with-body \
+            -X POST \
+            "${SUPABASE_URL}/storage/v1/object/apk-files/${APK_NAME}" \
+            -H "Authorization: Bearer ${SUPABASE_SERVICE_ROLE_KEY}" \
+            -H "apikey: ${SUPABASE_SERVICE_ROLE_KEY}" \
+            -H "Content-Type: application/vnd.android.package-archive" \
+            --data-binary "@app/build/outputs/apk/debug/app-debug.apk"
+
+          echo "APK uploaded successfully"
+
+      # 12. Create public download URL
+      - name: Show APK Download URL
+        env:
+          SUPABASE_URL: "https://wgylobjcxqmjsutgdhdz.supabase.co"
+          APP_NAME: ${{ inputs.app_name }}
+        run: |
+
+          SAFE_NAME=$(echo "$APP_NAME" | \
+            tr '[:upper:]' '[:lower:]' | \
+            sed 's/[^a-z0-9_-]/-/g' | \
+            sed 's/--*/-/g' | \
+            sed 's/^-//' | \
+            sed 's/-$//')
+
+          if [ -z "$SAFE_NAME" ]; then
+            SAFE_NAME="website"
+          fi
+
+          APK_NAME="${SAFE_NAME}-${GITHUB_RUN_ID}.apk"
+
+          APK_URL="${SUPABASE_URL}/storage/v1/object/public/apk-files/${APK_NAME}"
+
+          echo "======================================"
+          echo "APK DOWNLOAD URL:"
+          echo "$APK_URL"
+          echo "======================================"          import re
           from pathlib import Path
 
           file = Path("app/src/main/AndroidManifest.xml")
