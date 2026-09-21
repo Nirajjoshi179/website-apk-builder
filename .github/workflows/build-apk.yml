@@ -2,6 +2,12 @@ name: Build Website APK
 
 on:
   workflow_dispatch:
+    inputs:
+      website_url:
+        description: "Website URL"
+        required: true
+        default: "https://example.com"
+        type: string
 
 jobs:
   build:
@@ -39,6 +45,11 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.7'
+
+      - name: Set Website URL
+        run: |
+          sed -i 's|webView.loadUrl(".*");|webView.loadUrl("${{ inputs.website_url }}");|' \
+          app/src/main/java/com/htmlhub/websiteapp/MainActivity.java
 
       - name: Build APK
         run: gradle assembleRelease
