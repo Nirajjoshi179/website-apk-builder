@@ -26,9 +26,6 @@ jobs:
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
-        with:
-          accept-android-sdk-licenses: false
-          packages: ''
 
       - name: Accept Android SDK Licenses
         run: |
@@ -51,11 +48,12 @@ jobs:
           sed -i 's|webView.loadUrl(".*");|webView.loadUrl("${{ inputs.website_url }}");|' \
           app/src/main/java/com/htmlhub/websiteapp/MainActivity.java
 
-      - name: Build APK
-        run: gradle assembleRelease
+      - name: Build Signed Debug APK
+        run: |
+          gradle assembleDebug
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: website-apk
-          path: app/build/outputs/apk/release/app-release-unsigned.apk
+          path: app/build/outputs/apk/debug/app-debug.apk
