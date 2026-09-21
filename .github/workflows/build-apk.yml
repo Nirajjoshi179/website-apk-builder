@@ -13,6 +13,10 @@ jobs:
   build:
     runs-on: ubuntu-latest
 
+    env:
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+
     steps:
 
       - name: Checkout repository
@@ -24,10 +28,12 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-        with:
-          accept-android-sdk-licenses: true
+      # IMPORTANT:
+      # Do NOT use android-actions/setup-android@v3
+
+      - name: Accept Android SDK Licenses
+        run: |
+          yes | sdkmanager --licenses > /dev/null 2>&1 || true
 
       - name: Install Android SDK
         run: |
@@ -41,11 +47,33 @@ jobs:
           gradle-version: '8.7'
 
       - name: Set Website URL
+        env:
+          WEBSITE_URL: ${{ inputs.website_url }}
         run: |
-          sed -i 's|webView.loadUrl(".*");|webView.loadUrl("${{ inputs.website_url }}");|' \
-          app/src/main/java/com/htmlhub/websiteapp/MainActivity.java
+          python3 - <<'PY'
+          import os
+          import re
+          from pathlib import Path
 
-      - name: Build Signed Debug APK
+          file = Path(
+              "app/src/main/java/com/htmlhub/websiteapp/MainActivity.java"
+          )
+
+          text = file.read_text()
+          url = os.environ["WEBSITE_URL"]
+
+          text = re.sub(
+              r'webView\.loadUrl\(".*?"\);',
+              'webView.loadUrl("' +
+              url.replace('\\', '\\\\').replace('"', '\\"') +
+              '");',
+              text
+          )
+
+          file.write_text(text)
+          PY
+
+      - name: Build Debug APK
         run: |
           gradle assembleDebug
 
