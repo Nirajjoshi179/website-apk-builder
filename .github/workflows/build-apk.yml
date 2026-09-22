@@ -15,6 +15,7 @@ on:
         default: "My Website"
         type: string
 
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -25,9 +26,10 @@ jobs:
 
     steps:
 
-      # 1. Checkout repository
+      # 1. Repository download
       - name: Checkout repository
         uses: actions/checkout@v4
+
 
       # 2. Java 17
       - name: Setup Java 17
@@ -36,33 +38,35 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      # 3. Accept Android licenses
+
+      # 3. Android licenses
       - name: Accept Android SDK Licenses
         run: |
-          SDKMANAGER=$(find /usr/local/lib/android/sdk/cmdline-tools -name sdkmanager -type f | head -1)
-
-          echo "Using sdkmanager: $SDKMANAGER"
+          SDKMANAGER=$(find /usr/local/lib/android/sdk/cmdline-tools \
+            -name sdkmanager -type f | head -1)
 
           yes | "$SDKMANAGER" --licenses > /dev/null 2>&1 || true
 
-      # 4. Install Android SDK
+
+      # 4. Android SDK
       - name: Install Android SDK
         run: |
-          SDKMANAGER=$(find /usr/local/lib/android/sdk/cmdline-tools -name sdkmanager -type f | head -1)
-
-          echo "Using sdkmanager: $SDKMANAGER"
+          SDKMANAGER=$(find /usr/local/lib/android/sdk/cmdline-tools \
+            -name sdkmanager -type f | head -1)
 
           "$SDKMANAGER" "platform-tools"
           "$SDKMANAGER" "platforms;android-35"
           "$SDKMANAGER" "build-tools;35.0.0"
 
-      # 5. Setup Gradle
+
+      # 5. Gradle
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "8.7"
 
-      # 6. Set Website URL
+
+      # 6. Website URL set
       - name: Set Website URL
         env:
           WEBSITE_URL: ${{ inputs.website_url }}
@@ -79,18 +83,22 @@ jobs:
           text = file.read_text()
           url = os.environ["WEBSITE_URL"]
 
+          safe_url = (
+              url.replace("\\", "\\\\")
+                 .replace('"', '\\"')
+          )
+
           text = re.sub(
               r'webView\.loadUrl\(".*?"\);',
-              'webView.loadUrl("' +
-              url.replace('\\', '\\\\').replace('"', '\\"') +
-              '");',
+              f'webView.loadUrl("{safe_url}");',
               text
           )
 
           file.write_text(text)
           PY
 
-      # 7. Set App Name
+
+      # 7. App Name set
       - name: Set App Name
         env:
           APP_NAME: ${{ inputs.app_name }}
@@ -105,39 +113,69 @@ jobs:
           text = file.read_text()
           name = os.environ["APP_NAME"]
 
+          safe_name = (
+              name.replace("\\", "\\\\")
+                  .replace('"', '\\"')
+          )
+
           text = re.sub(
               r'android:label="[^"]*"',
-              'android:label="' +
-              name.replace('\\', '\\\\').replace('"', '\\"') +
-              '"',
+              f'android:label="{safe_name}"',
               text
           )
 
           file.write_text(text)
           PY
 
-      # 8. Build APK
+
+      # 8. Check Supabase Secret
+      - name: Check Supabase Secret
+        env:
+          KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          if [ -z "$KEY" ]; then
+            echo "❌ SUPABASE_SERVICE_ROLE_KEY missing"
+            echo "GitHub Settings → Secrets and variables → Actions"
+            exit 1
+          fi
+
+          case "$KEY" in
+            sb_secret_*)
+              echo "✅ Supabase secret key found"
+              ;;
+            *)
+              echo "❌ Wrong Supabase key format"
+              echo "Key should start with sb_secret_"
+              exit 1
+              ;;
+          esac
+
+
+      # 9. Build APK
       - name: Build Debug APK
         run: |
           gradle assembleDebug
 
-      # 9. Check APK
+
+      # 10. Check APK
       - name: Check APK
         run: |
           ls -lh app/build/outputs/apk/debug/app-debug.apk
 
-      # 10. Upload APK to GitHub Artifact
+
+      # 11. GitHub Artifact
       - name: Upload GitHub Artifact
         uses: actions/upload-artifact@v4
         with:
           name: website-apk
           path: app/build/outputs/apk/debug/app-debug.apk
 
-      # 11. Upload APK to Supabase
+
+      # 12. Upload APK to Supabase
       - name: Upload APK to Supabase
         env:
           SUPABASE_URL: "https://wgylobjcxqmjsutgdhdz.supabase.co"
-          SUPABASE_SERVICE_ROLE_KEY: "sb_secret__Uqo-IS-qC99mfCEmVsCkg_Bvkqob0A"
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           APP_NAME: ${{ inputs.app_name }}
         run: |
 
@@ -164,9 +202,10 @@ jobs:
             -H "Content-Type: application/vnd.android.package-archive" \
             --data-binary "@app/build/outputs/apk/debug/app-debug.apk"
 
-          echo "APK uploaded successfully"
+          echo "✅ APK uploaded successfully"
 
-      # 12. Show APK Download URL
+
+      # 13. Show Download URL
       - name: Show APK Download URL
         env:
           SUPABASE_URL: "https://wgylobjcxqmjsutgdhdz.supabase.co"
@@ -188,7 +227,8 @@ jobs:
 
           APK_URL="${SUPABASE_URL}/storage/v1/object/public/apk-files/${APK_NAME}"
 
+          echo ""
           echo "======================================"
-          echo "APK DOWNLOAD URL:"
+          echo "✅ APK DOWNLOAD URL:"
           echo "$APK_URL"
           echo "======================================"
