@@ -26,12 +26,12 @@ jobs:
 
     steps:
 
-      # 1. Repository download
+      # 1. Checkout repository
       - name: Checkout repository
         uses: actions/checkout@v4
 
 
-      # 2. Java 17
+      # 2. Setup Java 17
       - name: Setup Java 17
         uses: actions/setup-java@v4
         with:
@@ -39,7 +39,7 @@ jobs:
           java-version: "17"
 
 
-      # 3. Android licenses
+      # 3. Accept Android licenses
       - name: Accept Android SDK Licenses
         run: |
           SDKMANAGER=$(find /usr/local/lib/android/sdk/cmdline-tools \
@@ -48,7 +48,7 @@ jobs:
           yes | "$SDKMANAGER" --licenses > /dev/null 2>&1 || true
 
 
-      # 4. Android SDK
+      # 4. Install Android SDK
       - name: Install Android SDK
         run: |
           SDKMANAGER=$(find /usr/local/lib/android/sdk/cmdline-tools \
@@ -59,14 +59,42 @@ jobs:
           "$SDKMANAGER" "build-tools;35.0.0"
 
 
-      # 5. Gradle
+      # 5. Setup Gradle
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "8.7"
 
 
-      # 6. Website URL set
+      # 6. Check Supabase Secret
+      - name: Check Supabase Secret
+        env:
+          KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          if [ -z "$KEY" ]; then
+            echo "❌ SUPABASE_SERVICE_ROLE_KEY missing"
+            echo ""
+            echo "Go to:"
+            echo "Settings → Secrets and variables → Actions"
+            echo ""
+            echo "Create repository secret:"
+            echo "SUPABASE_SERVICE_ROLE_KEY"
+            exit 1
+          fi
+
+          case "$KEY" in
+            sb_secret_*)
+              echo "✅ Supabase secret key found"
+              ;;
+            *)
+              echo "❌ Wrong Supabase key format"
+              echo "The key must start with sb_secret_"
+              exit 1
+              ;;
+          esac
+
+
+      # 7. Set Website URL
       - name: Set Website URL
         env:
           WEBSITE_URL: ${{ inputs.website_url }}
@@ -98,7 +126,7 @@ jobs:
           PY
 
 
-      # 7. App Name set
+      # 8. Set App Name
       - name: Set App Name
         env:
           APP_NAME: ${{ inputs.app_name }}
@@ -128,29 +156,6 @@ jobs:
           PY
 
 
-      # 8. Check Supabase Secret
-      - name: Check Supabase Secret
-        env:
-          KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-        run: |
-          if [ -z "$KEY" ]; then
-            echo "❌ SUPABASE_SERVICE_ROLE_KEY missing"
-            echo "GitHub Settings → Secrets and variables → Actions"
-            exit 1
-          fi
-
-          case "$KEY" in
-            sb_secret_*)
-              echo "✅ Supabase secret key found"
-              ;;
-            *)
-              echo "❌ Wrong Supabase key format"
-              echo "Key should start with sb_secret_"
-              exit 1
-              ;;
-          esac
-
-
       # 9. Build APK
       - name: Build Debug APK
         run: |
@@ -163,7 +168,7 @@ jobs:
           ls -lh app/build/outputs/apk/debug/app-debug.apk
 
 
-      # 11. GitHub Artifact
+      # 11. Upload APK to GitHub Artifact
       - name: Upload GitHub Artifact
         uses: actions/upload-artifact@v4
         with:
@@ -205,7 +210,7 @@ jobs:
           echo "✅ APK uploaded successfully"
 
 
-      # 13. Show Download URL
+      # 13. Show APK Download URL
       - name: Show APK Download URL
         env:
           SUPABASE_URL: "https://wgylobjcxqmjsutgdhdz.supabase.co"
