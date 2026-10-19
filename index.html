@@ -1,1 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HTMLHub APK Builder</title>
 
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:Arial,sans-serif;background:#f4f6fa;color:#171717;padding:18px}
+.container{max-width:600px;margin:auto}
+header{padding:20px 0}
+header h2{font-size:25px}
+header p{color:#666;margin-top:8px;font-size:14px}
+.card{background:white;padding:18px;border-radius:16px;margin-top:15px;box-shadow:0 3px 15px #00000008}
+label{display:block;font-weight:bold;margin:15px 0 8px;font-size:14px}
+input,textarea,select{width:100%;padding:13px;border:1px solid #ddd;border-radius:10px;font-size:15px;background:white}
+textarea{height:170px;resize:vertical;font-family:monospace}
+.modes{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}
+.mode{padding:15px 8px;border:1px solid #ddd;border-radius:12px;text-align:center;cursor:pointer;background:white;font-size:14px}
+.mode.active{border:2px solid #087cff;background:#eef6ff;color:#087cff}
+.mode span{display:block;font-size:24px;margin-bottom:8px}
+.section{display:none}
+.section.active{display:block}
+button{width:100%;padding:15px;border:0;border-radius:11px;background:#087cff;color:white;font-weight:bold;font-size:16px;margin-top:20px;cursor:pointer}
+button:disabled{opacity:.6}
+.note{font-size:12px;color:#666;line-height:1.6;margin-top:12px}
+#status{margin-top:15px;font-size:14px;line-height:1.6;overflow-wrap:anywhere}
+</style>
+</head>
+
+<body>
+<div class="container">
+<header>
+<h2>📱 HTMLHub APK Builder</h2>
+<p>Convert your website into an Android app.</p>
+</header>
+
+<div class="card">
+<label>App Name</label>
+<input id="appName" placeholder="My Website" maxlength="40">
+
+<label>Choose Website Source</label>
+<div class="modes">
+<div class="mode active" data-mode="html"><span>💻</span>HTML Code</div>
+<div class="mode" data-mode="file"><span>📄</span>HTML File</div>
+<div class="mode" data-mode="zip"><span>📦</span>ZIP Folder</div>
+<div class="mode" data-mode="url"><span>🌐</span>Website URL</div>
+</div>
+
+<div class="section active" id="html">
+<label>Paste HTML Code</label>
+<textarea id="htmlCode" placeholder="<!DOCTYPE html>
+<html>
+<body>
+<h1>Hello World!</h1>
+</body>
+</html>"></textarea>
+</div>
+
+<div class="section" id="file">
+<label>Select HTML File</label>
+<input id="htmlFile" type="file" accept=".html,.htm">
+</div>
+
+<div class="section" id="zip">
+<label>Select Website ZIP</label>
+<input id="zipFile" type="file" accept=".zip,application/zip">
+<p class="note">ZIP में index.html और आपकी CSS, JavaScript व images होनी चाहिए।</p>
+</div>
+
+<div class="section" id="url">
+<label>Website URL</label>
+<input id="websiteUrl" type="url" placeholder="https://example.com">
+</div>
+
+<label>Android Package ID</label>
+<input id="packageName" value="com.htmlhub.mywebsite" placeholder="com.example.myapp">
+
+<button id="buildBtn">Build APK</button>
+<div id="status" role="status"></div>
+<p class="note">यह फ्रंटएंड है। APK बनाने के लिए इसे आपके GitHub Actions builder से जोड़ना होगा।</p>
+</div>
+</div>
+
+<script>
+const modes = document.querySelectorAll(".mode");
+const sections = document.querySelectorAll(".section");
+const statusBox = document.getElementById("status");
+let selectedMode = "html";
+
+modes.forEach(function(mode){
+  mode.addEventListener("click",function(){
+    selectedMode = mode.dataset.mode;
+
+    modes.forEach(function(item){
+      item.classList.remove("active");
+    });
+
+    sections.forEach(function(section){
+      section.classList.remove("active");
+    });
+
+    mode.classList.add("active");
+    document.getElementById(selectedMode).classList.add("active");
+    statusBox.textContent = "";
+  });
+});
+
+document.getElementById("buildBtn").addEventListener("click",function(){
+  const appName = document.getElementById("appName").value.trim();
+  const packageName = document.getElementById("packageName").value.trim();
+
+  if(!appName){
+    statusBox.textContent = "Please enter an app name.";
+    return;
+  }
+
+  if(!/^[a-zA-Z][a-zA-Z0-9_]*(\.[a-zA-Z][a-zA-Z0-9_]*)+$/.test(packageName)){
+    statusBox.textContent = "Enter a valid package ID, e.g. com.example.myapp";
+    return;
+  }
+
+  if(selectedMode === "html" &&
+     !document.getElementById("htmlCode").value.trim()){
+    statusBox.textContent = "Please paste your HTML code.";
+    return;
+  }
+
+  if(selectedMode === "file" &&
+     !document.getElementById("htmlFile").files.length){
+    statusBox.textContent = "Please select an HTML file.";
+    return;
+  }
+
+  if(selectedMode === "zip" &&
+     !document.getElementById("zipFile").files.length){
+    statusBox.textContent = "Please select a ZIP file.";
+    return;
+  }
+
+  if(selectedMode === "url"){
+    const url = document.getElementById("websiteUrl").value.trim();
+
+    try{
+      if(new URL(url).protocol !== "https:"){
+        statusBox.textContent = "Please use an HTTPS website URL.";
+        return;
+      }
+    }catch(error){
+      statusBox.textContent = "Please enter a valid website URL.";
+      return;
+    }
+  }
+
+  statusBox.textContent =
+    "Input validated. Next, connect this form to the GitHub Actions APK builder to start a real build.";
+});
+</script>
+</body>
+</html>
