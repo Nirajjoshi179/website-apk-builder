@@ -1,3 +1,4 @@
+
 name: Build Website APK
 
 on:
@@ -14,32 +15,34 @@ on:
           - url
 
       app_name:
-        description: "App Name"
+        description: "App name"
         required: true
         type: string
         default: "My Website"
 
       package_name:
-        description: "Android Package ID"
+        description: "Android package name"
         required: true
         type: string
         default: "com.htmlhub.websiteapp"
 
       website_url:
-        description: "HTTPS URL (url mode)"
+        description: "Website URL for URL mode"
         required: false
         type: string
         default: "https://example.com"
 
       html_code:
-        description: "HTML code (html mode)"
+        description: "HTML code for HTML mode"
         required: false
         type: string
+        default: ""
 
       source_path:
-        description: "Supabase Storage path for file/zip"
+        description: "Supabase Storage path for file or ZIP"
         required: false
         type: string
+        default: ""
 
 permissions:
   contents: read
@@ -47,126 +50,135 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 35
 
     env:
-      SUPABASE_URL: https://wgylobjcxqmjsutgdhdz.supabase.co
-      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-      SOURCE_TYPE: ${{ inputs.source_type }}
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
       APP_NAME: ${{ inputs.app_name }}
       PACKAGE_NAME: ${{ inputs.package_name }}
+      SOURCE_TYPE: ${{ inputs.source_type }}
       WEBSITE_URL: ${{ inputs.website_url }}
       HTML_CODE: ${{ inputs.html_code }}
       SOURCE_PATH: ${{ inputs.source_path }}
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
 
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Java
+      - name: Set up Java 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "17"
 
-      - name: Setup Android SDK
+      - name: Set up Android SDK
         uses: android-actions/setup-android@v3
-
-      - name: Accept Android SDK licenses
-        run: |
-          yes | sdkmanager --licenses >/dev/null 2>&1 || true
 
       - name: Install Android SDK packages
         run: |
-          sdkmanager "platform-tools" \
+          sdkmanager --install \
+            "platform-tools" \
             "platforms;android-35" \
             "build-tools;35.0.0"
 
-      - name: Setup Gradle
+      - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: "8.7"
 
-      - name: Prepare source
+      - name: Check project files
+        run: |
+          test -f app/build.gradle || test -f app/build.gradle.kts
+          test -f scripts/prepare_source.py
+          echo "Project files found."
+
+      - name: Prepare website source
         run: python3 scripts/prepare_source.py
 
       - name: Set app name
         run: |
-          python3 - <<'PY'
+          if [ -f app/src/main/res/values/strings.xml ]; then
+            python3 - <<'PY'
           import os
-          from pathlib import Path
-          import xml.sax.saxutils as x
+          import xml.etree.ElementTree as ET
 
-          p = Path("app/src/main/res/values")
-          p.mkdir(parents=True, exist_ok=True)
-          name = x.escape(os.environ["APP_NAME"][:40])
-          (p / "strings.xml").write_text(
-              f'<resources><string name="app_name">{name}</string></resources>'
-          )
+          path = "app/src/main/res/values/strings.xml"
+          tree = ET.parse(path)
+          root = tree.getroot()
+          name = os.environ.get("APP_NAME", "My Website")
+
+          app_name = root.find("string[@name='app_name']")
+          if app_name is None:
+              app_name = ET.SubElement(root, "string", {"name": "app_name"})
+
+          app_name.text = name
+          tree.write(path, encoding="utf-8", xml_declaration=True)
           PY
+          else
+            echo "strings.xml not found."
+            exit 1
+          fi
 
       - name: Build APK
-        run: gradle --no-daemon assembleDebug
+        run: |
+          if [ -f ./gradlew ]; then
+            chmod +x ./gradlew
+            ./gradlew --no-daemon assembleDebug
+          else
+            gradle --no-daemon assembleDebug
+          fi
+
+      - name: Verify APK
+        run: |
+          test -f app/build/outputs/apk/debug/app-debug.apk
+          ls -lh app/build/outputs/apk/debug/app-debug.apk
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: website-apk-${{ github.run_id }}
+          name: website-apk
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
-          retention-days: 7
 
       - name: Upload APK to Supabase
-        env:
-          APK_SECRET: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        if: ${{ env.SUPABASE_URL != '' && env.SUPABASE_SERVICE_ROLE_KEY != '' }}
         run: |
           python3 - <<'PY'
           import os
-          import re
           import urllib.request
           import urllib.error
 
-          base = os.environ["SUPABASE_URL"].rstrip("/")
-          key = os.environ.get("APK_SECRET", "")
+          url = os.environ["SUPABASE_URL"].rstrip("/")
+          key = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
+          path = "app/build/outputs/apk/debug/app-debug.apk"
 
-          if not key:
-              raise SystemExit(
-                  "Missing repository secret: SUPABASE_SERVICE_ROLE_KEY"
-              )
-
-          name = re.sub(
-              r"[^a-z0-9_-]+", "-",
-              os.environ["APP_NAME"].lower()
-          ).strip("-")[:40] or "website"
-
-          filename = f"{name}-{os.environ['GITHUB_RUN_ID']}.apk"
-          apk_path = "app/build/outputs/apk/debug/app-debug.apk"
-
-          with open(apk_path, "rb") as f:
+          with open(path, "rb") as f:
               apk = f.read()
 
-          req = urllib.request.Request(
-              f"{base}/storage/v1/object/apk-files/{filename}",
+          endpoint = (
+              url
+              + "/storage/v1/object/apk-files/website-apk/"
+              + "website-app.apk"
+          )
+
+          request = urllib.request.Request(
+              endpoint,
               data=apk,
               method="POST",
               headers={
-                  "Authorization": f"Bearer {key}",
+                  "Authorization": "Bearer " + key,
                   "apikey": key,
-                  "Content-Type":
-                      "application/vnd.android.package-archive",
-                  "x-upsert": "true"
-              }
+                  "Content-Type": "application/vnd.android.package-archive",
+                  "x-upsert": "true",
+              },
           )
 
           try:
-              with urllib.request.urlopen(req, timeout=120) as response:
+              with urllib.request.urlopen(request, timeout=120) as response:
                   print("Supabase upload status:", response.status)
-          except urllib.error.HTTPError as e:
-              print("Supabase upload failed:", e.code, e.read().decode())
+                  print("APK uploaded to storage.")
+          except urllib.error.HTTPError as error:
+              print("Supabase upload failed:", error.code)
+              print(error.read().decode("utf-8", errors="replace"))
               raise
-
-          print(
-              "APK URL:",
-              f"{base}/storage/v1/object/public/apk-files/{filename}"
-          )
           PY
