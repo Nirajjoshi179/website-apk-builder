@@ -8,10 +8,10 @@ on:
         required: true
         type: choice
         options:
+          - url
           - html
           - file
           - zip
-          - url
       app_name:
         description: "App name"
         required: true
@@ -23,17 +23,17 @@ on:
         type: string
         default: "com.htmlhub.websiteapp"
       website_url:
-        description: "Website URL"
+        description: "Website URL (source_type = url)"
         required: false
         type: string
         default: "https://example.com"
       html_code:
-        description: "HTML code"
+        description: "HTML code (source_type = html)"
         required: false
         type: string
         default: ""
       source_path:
-        description: "Supabase Storage file path"
+        description: "Supabase Storage file path (source_type = file/zip)"
         required: false
         type: string
         default: ""
@@ -62,15 +62,40 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Validate inputs
+        shell: bash
+        run: |
+          case "$SOURCE_TYPE" in
+            html)
+              if [ -z "${HTML_CODE//[[:space:]]/}" ]; then
+                echo "ERROR: source_type=html hai lekin html_code khali hai."
+                echo "Fix: html_code bharo, ya source_type=url use karo."
+                exit 1
+              fi
+              ;;
+            url)
+              if [ -z "$WEBSITE_URL" ]; then
+                echo "ERROR: source_type=url hai lekin website_url khali hai."
+                exit 1
+              fi
+              ;;
+            file|zip)
+              if [ -z "$SOURCE_PATH" ]; then
+                echo "ERROR: source_type=$SOURCE_TYPE hai lekin source_path khali hai."
+                exit 1
+              fi
+              ;;
+          esac
+          echo "Inputs OK (source_type=$SOURCE_TYPE)"
+
       - name: Setup Java 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "17"
 
-      # NOTE: "Setup Android SDK" step removed.
-      # ubuntu-latest already has the Android SDK preinstalled.
-
+      # ubuntu-latest par Android SDK pehle se installed hai,
+      # isliye "Setup Android SDK" action hata diya gaya hai.
       - name: Accept Android SDK licenses
         shell: bash
         run: |
