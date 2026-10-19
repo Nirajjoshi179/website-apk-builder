@@ -68,27 +68,18 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-        with:
-          accept-android-sdk-licenses: true
-          log-accepted-android-sdk-licenses: false
+      # NOTE: "Setup Android SDK" step removed.
+      # ubuntu-latest already has the Android SDK preinstalled.
 
       - name: Accept Android SDK licenses
         shell: bash
         run: |
-          set +e
-          yes | sdkmanager --licenses
-          result=${PIPESTATUS[1]}
-          set -e
-          if [ "$result" -ne 0 ]; then
-            echo "SDK license acceptance failed."
-            exit "$result"
-          fi
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
 
       - name: Install Android SDK packages
+        shell: bash
         run: |
-          sdkmanager --install \
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install \
             "platform-tools" \
             "platforms;android-35" \
             "build-tools;35.0.0"
