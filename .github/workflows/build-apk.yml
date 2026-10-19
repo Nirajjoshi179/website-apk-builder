@@ -1,11 +1,10 @@
-
 name: Build Website APK
 
 on:
   workflow_dispatch:
     inputs:
       source_type:
-        description: "Choose input mode"
+        description: "Website source type"
         required: true
         type: choice
         options:
@@ -13,33 +12,28 @@ on:
           - file
           - zip
           - url
-
       app_name:
         description: "App name"
         required: true
         type: string
         default: "My Website"
-
       package_name:
         description: "Android package name"
         required: true
         type: string
         default: "com.htmlhub.websiteapp"
-
       website_url:
-        description: "Website URL for URL mode"
+        description: "Website URL"
         required: false
         type: string
         default: "https://example.com"
-
       html_code:
-        description: "HTML code for HTML mode"
+        description: "HTML code"
         required: false
         type: string
         default: ""
-
       source_path:
-        description: "Supabase Storage path for file or ZIP"
+        description: "Supabase Storage file path"
         required: false
         type: string
         default: ""
@@ -50,6 +44,7 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
 
     env:
       ANDROID_HOME: /usr/local/lib/android/sdk
@@ -67,14 +62,29 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Java 17
+      - name: Setup Java 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "17"
 
-      - name: Set up Android SDK
+      - name: Setup Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          accept-android-sdk-licenses: true
+          log-accepted-android-sdk-licenses: false
+
+      - name: Accept Android SDK licenses
+        shell: bash
+        run: |
+          set +e
+          yes | sdkmanager --licenses
+          result=${PIPESTATUS[1]}
+          set -e
+          if [ "$result" -ne 0 ]; then
+            echo "SDK license acceptance failed."
+            exit "$result"
+          fi
 
       - name: Install Android SDK packages
         run: |
@@ -83,43 +93,48 @@ jobs:
             "platforms;android-35" \
             "build-tools;35.0.0"
 
-      - name: Set up Gradle
+      - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Check project files
+      - name: Check required files
         run: |
-          test -f app/build.gradle || test -f app/build.gradle.kts
           test -f scripts/prepare_source.py
-          echo "Project files found."
+          if [ ! -f app/build.gradle ] && [ ! -f app/build.gradle.kts ]; then
+            echo "ERROR: app/build.gradle or app/build.gradle.kts is missing."
+            exit 1
+          fi
+          if [ ! -f app/src/main/AndroidManifest.xml ]; then
+            echo "ERROR: AndroidManifest.xml is missing."
+            exit 1
+          fi
 
       - name: Prepare website source
         run: python3 scripts/prepare_source.py
 
-      - name: Set app name
+      - name: Set application display name
         run: |
-          if [ -f app/src/main/res/values/strings.xml ]; then
-            python3 - <<'PY'
+          python3 - <<'PY'
           import os
           import xml.etree.ElementTree as ET
 
           path = "app/src/main/res/values/strings.xml"
+          if not os.path.isfile(path):
+              raise SystemExit("strings.xml is missing")
+
           tree = ET.parse(path)
           root = tree.getroot()
-          name = os.environ.get("APP_NAME", "My Website")
+          node = root.find("string[@name='app_name']")
 
-          app_name = root.find("string[@name='app_name']")
-          if app_name is None:
-              app_name = ET.SubElement(root, "string", {"name": "app_name"})
+          if node is None:
+              node = ET.SubElement(root, "string", {"name": "app_name"})
 
-          app_name.text = name
+          node.text = os.environ.get("APP_NAME", "My Website")
           tree.write(path, encoding="utf-8", xml_declaration=True)
+          print("App display name updated.")
           PY
-          else
-            echo "strings.xml not found."
-            exit 1
-          fi
 
-      - name: Build APK
+      - name: Build debug APK
+        shell: bash
         run: |
           if [ -f ./gradlew ]; then
             chmod +x ./gradlew
@@ -130,8 +145,12 @@ jobs:
 
       - name: Verify APK
         run: |
-          test -f app/build/outputs/apk/debug/app-debug.apk
-          ls -lh app/build/outputs/apk/debug/app-debug.apk
+          APK="app/build/outputs/apk/debug/app-debug.apk"
+          if [ ! -s "$APK" ]; then
+            echo "APK was not created."
+            exit 1
+          fi
+          ls -lh "$APK"
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
@@ -139,46 +158,44 @@ jobs:
           name: website-apk
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
+          retention-days: 7
 
       - name: Upload APK to Supabase
         if: ${{ env.SUPABASE_URL != '' && env.SUPABASE_SERVICE_ROLE_KEY != '' }}
+        shell: bash
         run: |
           python3 - <<'PY'
           import os
           import urllib.request
           import urllib.error
 
-          url = os.environ["SUPABASE_URL"].rstrip("/")
+          base = os.environ["SUPABASE_URL"].rstrip("/")
           key = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
-          path = "app/build/outputs/apk/debug/app-debug.apk"
+          apk_path = "app/build/outputs/apk/debug/app-debug.apk"
 
-          with open(path, "rb") as f:
-              apk = f.read()
+          with open(apk_path, "rb") as f:
+              data = f.read()
 
-          endpoint = (
-              url
-              + "/storage/v1/object/apk-files/website-apk/"
-              + "website-app.apk"
-          )
+          url = base + "/storage/v1/object/apk-files/website-apk/website-app.apk"
 
           request = urllib.request.Request(
-              endpoint,
-              data=apk,
+              url,
+              data=data,
               method="POST",
               headers={
-                  "Authorization": "Bearer " + key,
                   "apikey": key,
+                  "Authorization": "Bearer " + key,
                   "Content-Type": "application/vnd.android.package-archive",
-                  "x-upsert": "true",
-              },
+                  "x-upsert": "true"
+              }
           )
 
           try:
               with urllib.request.urlopen(request, timeout=120) as response:
                   print("Supabase upload status:", response.status)
-                  print("APK uploaded to storage.")
-          except urllib.error.HTTPError as error:
-              print("Supabase upload failed:", error.code)
-              print(error.read().decode("utf-8", errors="replace"))
+                  print("APK upload successful.")
+          except urllib.error.HTTPError as e:
+              print("Supabase upload failed:", e.code)
+              print(e.read().decode("utf-8", errors="replace"))
               raise
           PY
