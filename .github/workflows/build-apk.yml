@@ -12,26 +12,31 @@ on:
           - html
           - file
           - zip
+
       app_name:
         description: "App name"
         required: true
         type: string
         default: "My Website"
+
       package_name:
         description: "Android package name"
         required: true
         type: string
         default: "com.htmlhub.websiteapp"
+
       website_url:
         description: "Website URL (source_type = url)"
         required: false
         type: string
         default: "https://example.com"
+
       html_code:
         description: "HTML code (source_type = html)"
         required: false
         type: string
         default: ""
+
       source_path:
         description: "Supabase Storage file path (source_type = file/zip)"
         required: false
@@ -65,28 +70,34 @@ jobs:
       - name: Validate inputs
         shell: bash
         run: |
+          set -e
+
           case "$SOURCE_TYPE" in
             html)
               if [ -z "${HTML_CODE//[[:space:]]/}" ]; then
-                echo "ERROR: source_type=html hai lekin html_code khali hai."
-                echo "Fix: html_code bharo, ya source_type=url use karo."
+                echo "ERROR: HTML code is empty."
                 exit 1
               fi
               ;;
             url)
               if [ -z "$WEBSITE_URL" ]; then
-                echo "ERROR: source_type=url hai lekin website_url khali hai."
+                echo "ERROR: Website URL is empty."
                 exit 1
               fi
+              python3 -c 'import os,urllib.parse,sys; u=urllib.parse.urlparse(os.environ["WEBSITE_URL"]); sys.exit(0 if u.scheme in ("http","https") and u.netloc else 1)' || {
+                echo "ERROR: Enter a valid HTTP/HTTPS URL."
+                exit 1
+              }
               ;;
             file|zip)
               if [ -z "$SOURCE_PATH" ]; then
-                echo "ERROR: source_type=$SOURCE_TYPE hai lekin source_path khali hai."
+                echo "ERROR: Supabase source path is empty."
                 exit 1
               fi
               ;;
           esac
-          echo "Inputs OK (source_type=$SOURCE_TYPE)"
+
+          echo "Input validation successful."
 
       - name: Setup Java 17
         uses: actions/setup-java@v4
@@ -94,17 +105,57 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      # ubuntu-latest par Android SDK pehle se installed hai,
-      # isliye "Setup Android SDK" action hata diya gaya hai.
+      - name: Locate Android SDK
+        shell: bash
+        run: |
+          set -e
+
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
+
+          SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" \
+            -type f -name sdkmanager 2>/dev/null | head -n 1)"
+
+          if [ -z "$SDKMANAGER" ]; then
+            echo "sdkmanager not found. Installing Android command-line tools."
+
+            mkdir -p "$ANDROID_HOME/cmdline-tools"
+            cd "$RUNNER_TEMP"
+
+            curl -fL \
+              https://dl.google.com/android/repository/commandlinetools-linux-13114758_latest.zip \
+              -o android-tools.zip
+
+            mkdir -p android-tools
+            unzip -q android-tools.zip -d android-tools
+
+            rm -rf "$ANDROID_HOME/cmdline-tools/latest"
+            mv android-tools/cmdline-tools \
+              "$ANDROID_HOME/cmdline-tools/latest"
+
+            SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          fi
+
+          if [ ! -x "$SDKMANAGER" ]; then
+            chmod +x "$SDKMANAGER"
+          fi
+
+          echo "SDKMANAGER=$SDKMANAGER" >> "$GITHUB_ENV"
+          echo "Found sdkmanager: $SDKMANAGER"
+
       - name: Accept Android SDK licenses
         shell: bash
         run: |
-          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
+          set -o pipefail
+          yes | "$SDKMANAGER" --sdk_root="$ANDROID_HOME" --licenses \
+            || "$SDKMANAGER" --sdk_root="$ANDROID_HOME" --licenses
 
       - name: Install Android SDK packages
         shell: bash
         run: |
-          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install \
+          set -e
+
+          "$SDKMANAGER" --sdk_root="$ANDROID_HOME" --install \
             "platform-tools" \
             "platforms;android-35" \
             "build-tools;35.0.0"
@@ -113,45 +164,118 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
 
       - name: Check required files
+        shell: bash
         run: |
-          test -f scripts/prepare_source.py
-          if [ ! -f app/build.gradle ] && [ ! -f app/build.gradle.kts ]; then
-            echo "ERROR: app/build.gradle or app/build.gradle.kts is missing."
+          set -e
+
+          test -f scripts/prepare_source.py || {
+            echo "ERROR: scripts/prepare_source.py is missing."
+            exit 1
+          }
+
+          if [ ! -f app/build.gradle ] && \
+             [ ! -f app/build.gradle.kts ]; then
+            echo "ERROR: Android app Gradle file is missing."
             exit 1
           fi
-          if [ ! -f app/src/main/AndroidManifest.xml ]; then
+
+          test -f app/src/main/AndroidManifest.xml || {
             echo "ERROR: AndroidManifest.xml is missing."
             exit 1
-          fi
+          }
+
+          test -f app/src/main/res/values/strings.xml || {
+            echo "ERROR: strings.xml is missing."
+            exit 1
+          }
 
       - name: Prepare website source
-        run: python3 scripts/prepare_source.py
-
-      - name: Set application display name
+        shell: bash
         run: |
+          set -e
+          python3 scripts/prepare_source.py
+
+      - name: Set app name and package ID
+        shell: bash
+        run: |
+          set -e
+
           python3 - <<'PY'
           import os
+          import re
           import xml.etree.ElementTree as ET
 
-          path = "app/src/main/res/values/strings.xml"
-          if not os.path.isfile(path):
-              raise SystemExit("strings.xml is missing")
+          package_name = os.environ["PACKAGE_NAME"]
+          app_name = os.environ["APP_NAME"]
 
-          tree = ET.parse(path)
+          if not re.fullmatch(
+              r"[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)+",
+              package_name
+          ):
+              raise SystemExit("Invalid Android package name: " + package_name)
+
+          strings_path = "app/src/main/res/values/strings.xml"
+          tree = ET.parse(strings_path)
           root = tree.getroot()
-          node = root.find("string[@name='app_name']")
 
+          node = root.find("string[@name='app_name']")
           if node is None:
               node = ET.SubElement(root, "string", {"name": "app_name"})
 
-          node.text = os.environ.get("APP_NAME", "My Website")
-          tree.write(path, encoding="utf-8", xml_declaration=True)
-          print("App display name updated.")
+          node.text = app_name
+          tree.write(strings_path, encoding="utf-8", xml_declaration=True)
+
+          manifest_path = "app/src/main/AndroidManifest.xml"
+          manifest_tree = ET.parse(manifest_path)
+          manifest_root = manifest_tree.getroot()
+
+          android_ns = "{http://schemas.android.com/apk/res/android}"
+          manifest_root.set("package", package_name)
+
+          manifest_tree.write(
+              manifest_path,
+              encoding="utf-8",
+              xml_declaration=True
+          )
+
+          gradle_path = (
+              "app/build.gradle.kts"
+              if os.path.isfile("app/build.gradle.kts")
+              else "app/build.gradle"
+          )
+
+          with open(gradle_path, encoding="utf-8") as f:
+              gradle_text = f.read()
+
+          # Update existing applicationId; fail instead of silently
+          # claiming the package ID was changed if the syntax is unknown.
+          if gradle_path.endswith(".kts"):
+              pattern = r'applicationId\s*=\s*"[^"]*"'
+              replacement = f'applicationId = "{package_name}"'
+          else:
+              pattern = r'applicationId\s+["\'][^"\']*["\']'
+              replacement = f'applicationId "{package_name}"'
+
+          updated, count = re.subn(pattern, replacement, gradle_text, count=1)
+
+          if count == 0:
+              raise SystemExit(
+                  "Could not find applicationId in " + gradle_path +
+                  ". Add applicationId to the Android app Gradle config."
+              )
+
+          with open(gradle_path, "w", encoding="utf-8") as f:
+              f.write(updated)
+
+          print("App name updated.")
+          print("Package ID updated:", package_name)
           PY
 
       - name: Build debug APK
         shell: bash
         run: |
+          set -e
+
           if [ -f ./gradlew ]; then
             chmod +x ./gradlew
             ./gradlew --no-daemon assembleDebug
@@ -160,12 +284,17 @@ jobs:
           fi
 
       - name: Verify APK
+        shell: bash
         run: |
+          set -e
+
           APK="app/build/outputs/apk/debug/app-debug.apk"
+
           if [ ! -s "$APK" ]; then
-            echo "APK was not created."
+            echo "ERROR: APK was not created."
             exit 1
           fi
+
           ls -lh "$APK"
 
       - name: Upload APK artifact
@@ -180,6 +309,8 @@ jobs:
         if: ${{ env.SUPABASE_URL != '' && env.SUPABASE_SERVICE_ROLE_KEY != '' }}
         shell: bash
         run: |
+          set -e
+
           python3 - <<'PY'
           import os
           import urllib.request
@@ -192,7 +323,10 @@ jobs:
           with open(apk_path, "rb") as f:
               data = f.read()
 
-          url = base + "/storage/v1/object/apk-files/website-apk/website-app.apk"
+          url = (
+              base
+              + "/storage/v1/object/apk-files/website-apk/website-app.apk"
+          )
 
           request = urllib.request.Request(
               url,
