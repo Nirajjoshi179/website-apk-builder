@@ -324,7 +324,7 @@ jobs:
               data = f.read()
           url = (
                  base
-                   + "/storage/v1/object/html-output/website-app.apk"
+                   + "/storage/v1/object/apk-output/website-app.apk"
             )
           request = urllib.request.Request(
               url,
