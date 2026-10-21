@@ -12,17 +12,17 @@ body{font-family:Arial,sans-serif;background:#f4f6fa;color:#171717;padding:16px}
 header{padding:20px 0}
 header h2{font-size:24px}
 header p,.note{color:#666;font-size:13px;line-height:1.6;margin-top:8px}
-.card{background:white;padding:17px;border-radius:16px;margin-top:15px;box-shadow:0 3px 15px #00000008}
+.card{background:#fff;padding:17px;border-radius:16px;margin-top:15px;box-shadow:0 3px 15px #00000008}
 label{display:block;font-weight:bold;margin:15px 0 8px;font-size:14px}
-input,textarea{width:100%;padding:13px;border:1px solid #ddd;border-radius:10px;font-size:15px;background:white}
+input,textarea{width:100%;padding:13px;border:1px solid #ddd;border-radius:10px;font-size:15px;background:#fff}
 textarea{height:170px;resize:vertical;font-family:monospace}
 .modes{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}
-.mode{padding:14px 8px;border:1px solid #ddd;border-radius:12px;text-align:center;cursor:pointer;background:white;font-size:14px}
+.mode{padding:14px 8px;border:1px solid #ddd;border-radius:12px;text-align:center;cursor:pointer;background:#fff;font-size:14px}
 .mode.active{border:2px solid #087cff;background:#eef6ff;color:#087cff}
 .mode span{display:block;font-size:24px;margin-bottom:8px}
 .section{display:none}
 .section.active{display:block}
-button,.download{display:block;width:100%;padding:14px;border:0;border-radius:11px;background:#087cff;color:white;font-weight:bold;font-size:15px;margin-top:15px;cursor:pointer;text-align:center;text-decoration:none}
+button,.download{display:block;width:100%;padding:14px;border:0;border-radius:11px;background:#087cff;color:#fff;font-weight:bold;font-size:15px;margin-top:15px;cursor:pointer;text-align:center;text-decoration:none}
 button:disabled{opacity:.55;cursor:not-allowed}
 .secondary{background:#222}
 #status{margin-top:15px;font-size:14px;line-height:1.6;overflow-wrap:anywhere}
@@ -31,6 +31,7 @@ button:disabled{opacity:.55;cursor:not-allowed}
 .historyItem{padding:12px 0;border-bottom:1px solid #eee;overflow-wrap:anywhere}
 .historyItem:last-child{border-bottom:0}
 .small{font-size:12px;color:#666;margin-top:5px}
+[hidden]{display:none!important}
 </style>
 </head>
 <body>
@@ -41,47 +42,46 @@ button:disabled{opacity:.55;cursor:not-allowed}
 </header>
 
 <div class="card">
-<label>App Name</label>
-<input id="appName" placeholder="My Website" maxlength="40">
+<label for="appName">App Name</label>
+<input id="appName" placeholder="My Website" maxlength="40" value="Htmlhub">
 
 <label>Choose Website Source</label>
 <div class="modes">
-<div class="mode active" data-mode="html"><span>💻</span>HTML Code</div>
-<div class="mode" data-mode="file"><span>📄</span>HTML File</div>
-<div class="mode" data-mode="zip"><span>📦</span>ZIP Folder</div>
-<div class="mode" data-mode="url"><span>🌐</span>Website URL</div>
+<div class="mode active" data-mode="html" role="button" tabindex="0"><span>💻</span>HTML Code</div>
+<div class="mode" data-mode="file" role="button" tabindex="0"><span>📄</span>HTML File</div>
+<div class="mode" data-mode="zip" role="button" tabindex="0"><span>📦</span>ZIP Folder</div>
+<div class="mode" data-mode="url" role="button" tabindex="0"><span>🌐</span>Website URL</div>
 </div>
 
 <div class="section active" id="html">
-<label>Paste HTML Code</label>
+<label for="htmlCode">Paste HTML Code</label>
 <textarea id="htmlCode" placeholder="Paste your complete HTML code"></textarea>
 </div>
 
 <div class="section" id="file">
-<label>Select HTML File</label>
-<input id="htmlFile" type="file" accept=".html,.htm">
+<label for="htmlFile">Select HTML File</label>
+<input id="htmlFile" type="file" accept=".html,.htm,text/html">
 </div>
 
 <div class="section" id="zip">
-<label>Select Website ZIP</label>
+<label for="zipFile">Select Website ZIP</label>
 <input id="zipFile" type="file" accept=".zip,application/zip">
 <p class="note">ZIP में index.html और CSS, JavaScript व images रखें।</p>
 </div>
 
 <div class="section" id="url">
-<label>Website URL</label>
+<label for="websiteUrl">Website URL</label>
 <input id="websiteUrl" type="url" placeholder="https://example.com">
 </div>
 
-<label>Android Package ID</label>
-<input id="packageName" value="com.htmlhub.mywebsite">
+<label for="packageName">Android Package ID</label>
+<input id="packageName" value="com.htmlhub.mywebsite" maxlength="200">
 
 <button id="buildBtn">🚀 Build APK</button>
-
-<div class="progress"><div id="progressBar"></div></div>
+<div class="progress" aria-label="Build progress"><div id="progressBar"></div></div>
 <div id="status" role="status" aria-live="polite">Ready to build.</div>
 <a id="downloadBtn" class="download" hidden>⬇ Download APK</a>
-<p class="note">Build status GitHub Actions से प्राप्त होगा। APK download तभी होगा जब backend download URL लौटाए।</p>
+<p class="note">यह पेज Supabase Edge Function smart-endpoint को request भेजता है। Backend को build status और download URL लौटाना होगा।</p>
 </div>
 
 <div class="card">
@@ -94,7 +94,7 @@ button:disabled{opacity:.55;cursor:not-allowed}
 <script>
 const SUPABASE_URL = "https://wgylobjcxqmjsutgdhdz.supabase.co";
 const SUPABASE_KEY = "sb_publishable_IfpDVaKbbxem461SnCl9UA_LFwdNOon";
-const APK_FUNCTION_URL = SUPABASE_URL + "/functions/v1/Apk";
+const APK_FUNCTION_URL = SUPABASE_URL + "/functions/v1/smart-endpoint";
 
 const $ = id => document.getElementById(id);
 const modes = document.querySelectorAll(".mode");
@@ -105,7 +105,7 @@ let pollTimer = null;
 function setStatus(message, progress) {
   $("status").textContent = message;
   if (typeof progress === "number") {
-    $("progressBar").style.width = Math.max(0,Math.min(100,progress)) + "%";
+    $("progressBar").style.width = Math.max(0, Math.min(100, progress)) + "%";
   }
 }
 
@@ -120,26 +120,46 @@ async function api(action, data = {}) {
     body: JSON.stringify({ action, ...data })
   });
 
-  const result = await response.json().catch(() => ({}));
+  const raw = await response.text();
+  let result = {};
+  try { result = raw ? JSON.parse(raw) : {}; }
+  catch { result = { message: raw }; }
 
   if (!response.ok) {
-    throw new Error(result.error || result.message || "API error: " + response.status);
+    throw new Error(result.error || result.message || "Request failed (" + response.status + ")");
   }
   if (result.error) throw new Error(result.error);
   return result;
 }
 
+function chooseMode(mode) {
+  selectedMode = mode.dataset.mode;
+  modes.forEach(item => item.classList.toggle("active", item === mode));
+  document.querySelectorAll(".section").forEach(section => {
+    section.classList.toggle("active", section.id === selectedMode);
+  });
+  $("downloadBtn").hidden = true;
+  setStatus("Ready to build.", 0);
+}
+
 modes.forEach(mode => {
-  mode.addEventListener("click", () => {
-    selectedMode = mode.dataset.mode;
-    modes.forEach(item => item.classList.toggle("active", item === mode));
-    document.querySelectorAll(".section").forEach(section => {
-      section.classList.toggle("active", section.id === selectedMode);
-    });
-    $("downloadBtn").hidden = true;
-    setStatus("Ready to build.", 0);
+  mode.addEventListener("click", () => chooseMode(mode));
+  mode.addEventListener("keydown", event => {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      chooseMode(mode);
+    }
   });
 });
+
+async function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result).split(",")[1] || "");
+    reader.onerror = () => reject(new Error("Could not read selected file."));
+    reader.readAsDataURL(file);
+  });
+}
 
 async function getSource() {
   if (selectedMode === "html") {
@@ -153,25 +173,17 @@ async function getSource() {
     let parsed;
     try { parsed = new URL(value); }
     catch { throw new Error("Enter a valid website URL."); }
-    if (parsed.protocol !== "https:") {
-      throw new Error("Please use an HTTPS URL.");
-    }
+    if (parsed.protocol !== "https:") throw new Error("Please use an HTTPS URL.");
     return { source_type: "url", website_url: value };
   }
 
-  const fileInput = selectedMode === "file" ? $("htmlFile") : $("zipFile");
-  const file = fileInput.files[0];
+  const file = (selectedMode === "file" ? $("htmlFile") : $("zipFile")).files[0];
   if (!file) throw new Error("Please select a file.");
+  if (file.size > 5 * 1024 * 1024) {
+    throw new Error("File is over 5 MB. Upload it to Supabase Storage and send its source_path instead.");
+  }
 
-  // File bytes must be uploaded to your Supabase Storage by the backend.
-  // This request sends the file as base64 to the Edge Function.
-  const base64 = await new Promise((resolve,reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result).split(",")[1]);
-    reader.onerror = () => reject(new Error("Could not read the file."));
-    reader.readAsDataURL(file);
-  });
-
+  const base64 = await fileToBase64(file);
   return {
     source_type: selectedMode,
     file_name: file.name,
@@ -181,6 +193,8 @@ async function getSource() {
 
 $("buildBtn").addEventListener("click", async () => {
   if (pollTimer) clearInterval(pollTimer);
+  pollTimer = null;
+  activeBuildId = null;
   $("downloadBtn").hidden = true;
 
   const appName = $("appName").value.trim();
@@ -188,7 +202,7 @@ $("buildBtn").addEventListener("click", async () => {
 
   if (!appName) return setStatus("Please enter an app name.", 0);
   if (!/^[a-zA-Z][a-zA-Z0-9_]*(\.[a-zA-Z][a-zA-Z0-9_]*)+$/.test(packageName)) {
-    return setStatus("Enter a valid Android package ID.", 0);
+    return setStatus("Enter a valid Android package ID, e.g. com.example.myapp.", 0);
   }
 
   $("buildBtn").disabled = true;
@@ -196,7 +210,7 @@ $("buildBtn").addEventListener("click", async () => {
 
   try {
     const source = await getSource();
-    setStatus("Sending build request…", 10);
+    setStatus("Sending build request to Supabase…", 10);
 
     const result = await api("start", {
       app_name: appName,
@@ -204,15 +218,17 @@ $("buildBtn").addEventListener("click", async () => {
       ...source
     });
 
-    activeBuildId = result.build_id || result.id || result.run_id;
+    activeBuildId = result.build_id || result.id || result.run_id || result.workflow_run_id;
+
     if (!activeBuildId) {
-      throw new Error("Backend did not return build_id. Check the Apk Edge Function API.");
+      throw new Error("Function did not return build_id/run_id. The smart-endpoint API must return the GitHub Actions run ID.");
     }
 
-    setStatus("Build started. Waiting for GitHub Actions…", 15);
+    setStatus("Build started. Checking GitHub Actions…", 15);
     await checkBuildStatus();
-    pollTimer = setInterval(checkBuildStatus, 5000);
-
+    if (activeBuildId && !pollTimer) {
+      pollTimer = setInterval(checkBuildStatus, 5000);
+    }
   } catch (error) {
     setStatus("❌ " + error.message, 0);
     $("buildBtn").disabled = false;
@@ -225,27 +241,37 @@ async function checkBuildStatus() {
   try {
     const result = await api("status", { build_id: activeBuildId });
     const state = String(result.status || result.conclusion || "running").toLowerCase();
+    const apkUrl = result.apk_url || result.download_url;
 
-    if (["success","completed","complete","successful"].includes(state) &&
-        (result.apk_url || result.download_url)) {
+    if (["success", "completed", "complete", "successful"].includes(state)) {
       clearInterval(pollTimer);
       pollTimer = null;
-      setStatus("✅ APK build successful!", 100);
-      $("downloadBtn").href = result.apk_url || result.download_url;
-      $("downloadBtn").download = "";
-      $("downloadBtn").hidden = false;
+
+      if (apkUrl) {
+        $("downloadBtn").href = apkUrl;
+        $("downloadBtn").target = "_blank";
+        $("downloadBtn").rel = "noopener";
+        $("downloadBtn").hidden = false;
+        setStatus("✅ APK build successful!", 100);
+      } else {
+        setStatus("✅ Build completed, but backend did not return apk_url/download_url. Check the GitHub Actions artifact or Supabase Storage.", 100);
+      }
       $("buildBtn").disabled = false;
       loadHistory();
-    } else if (["failure","failed","error","cancelled"].includes(state)) {
+      return;
+    }
+
+    if (["failure", "failed", "error", "cancelled", "timed_out"].includes(state)) {
       clearInterval(pollTimer);
       pollTimer = null;
       setStatus("❌ Build failed: " + (result.message || state), 0);
       $("buildBtn").disabled = false;
-    } else {
-      const progress = Number(result.progress);
-      setStatus("⏳ Build status: " + state + (result.message ? " — " + result.message : ""), 
-        Number.isFinite(progress) ? progress : 35);
+      return;
     }
+
+    const p = Number(result.progress);
+    setStatus("⏳ Build status: " + state + (result.message ? " — " + result.message : ""),
+      Number.isFinite(p) && p > 0 ? p : 35);
   } catch (error) {
     clearInterval(pollTimer);
     pollTimer = null;
@@ -258,15 +284,15 @@ $("historyBtn").addEventListener("click", loadHistory);
 
 async function loadHistory() {
   $("history").textContent = "Loading history…";
+  $("historyBtn").disabled = true;
 
   try {
     const result = await api("history");
     const items = result.items || result.history || [];
-
     $("history").replaceChildren();
 
     if (!items.length) {
-      $("history").textContent = "No APK history returned.";
+      $("history").textContent = "No APK history returned by backend.";
       return;
     }
 
@@ -275,12 +301,12 @@ async function loadHistory() {
       row.className = "historyItem";
 
       const title = document.createElement("strong");
-      title.textContent = item.app_name || item.name || "APK Build";
+      title.textContent = item.app_name || item.name || item.display_title || "APK Build";
       row.appendChild(title);
 
       const detail = document.createElement("p");
       detail.className = "small";
-      detail.textContent = (item.status || "Unknown") +
+      detail.textContent = (item.status || item.conclusion || "Unknown") +
         (item.created_at ? " · " + new Date(item.created_at).toLocaleString() : "");
       row.appendChild(detail);
 
@@ -293,11 +319,22 @@ async function loadHistory() {
         a.target = "_blank";
         a.rel = "noopener";
         row.appendChild(a);
+      } else if (item.html_url) {
+        const a = document.createElement("a");
+        a.className = "download";
+        a.href = item.html_url;
+        a.textContent = "View GitHub Build";
+        a.target = "_blank";
+        a.rel = "noopener";
+        row.appendChild(a);
       }
+
       $("history").appendChild(row);
     });
   } catch (error) {
     $("history").textContent = "History error: " + error.message;
+  } finally {
+    $("historyBtn").disabled = false;
   }
 }
 </script>
