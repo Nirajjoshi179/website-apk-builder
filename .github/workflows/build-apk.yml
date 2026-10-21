@@ -230,7 +230,7 @@ jobs:
           manifest_root = manifest_tree.getroot()
 
           android_ns = "{http://schemas.android.com/apk/res/android}"
-          manifest_root.set("package", package_name)
+          manifest_root.attrib.pop("package", None)
 
           manifest_tree.write(
               manifest_path,
