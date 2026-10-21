@@ -2,33 +2,37 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#f4f6fa">
 <title>HTMLHub APK Builder</title>
-
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
-body{font-family:Arial,sans-serif;background:#f4f6fa;color:#171717;padding:18px}
+body{font-family:Arial,sans-serif;background:#f4f6fa;color:#171717;padding:16px}
 .container{max-width:600px;margin:auto}
 header{padding:20px 0}
-header h2{font-size:25px}
-header p{color:#666;margin-top:8px;font-size:14px}
-.card{background:white;padding:18px;border-radius:16px;margin-top:15px;box-shadow:0 3px 15px #00000008}
+header h2{font-size:24px}
+header p,.note{color:#666;font-size:13px;line-height:1.6;margin-top:8px}
+.card{background:white;padding:17px;border-radius:16px;margin-top:15px;box-shadow:0 3px 15px #00000008}
 label{display:block;font-weight:bold;margin:15px 0 8px;font-size:14px}
-input,textarea,select{width:100%;padding:13px;border:1px solid #ddd;border-radius:10px;font-size:15px;background:white}
+input,textarea{width:100%;padding:13px;border:1px solid #ddd;border-radius:10px;font-size:15px;background:white}
 textarea{height:170px;resize:vertical;font-family:monospace}
 .modes{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}
-.mode{padding:15px 8px;border:1px solid #ddd;border-radius:12px;text-align:center;cursor:pointer;background:white;font-size:14px}
+.mode{padding:14px 8px;border:1px solid #ddd;border-radius:12px;text-align:center;cursor:pointer;background:white;font-size:14px}
 .mode.active{border:2px solid #087cff;background:#eef6ff;color:#087cff}
 .mode span{display:block;font-size:24px;margin-bottom:8px}
 .section{display:none}
 .section.active{display:block}
-button{width:100%;padding:15px;border:0;border-radius:11px;background:#087cff;color:white;font-weight:bold;font-size:16px;margin-top:20px;cursor:pointer}
-button:disabled{opacity:.6}
-.note{font-size:12px;color:#666;line-height:1.6;margin-top:12px}
+button,.download{display:block;width:100%;padding:14px;border:0;border-radius:11px;background:#087cff;color:white;font-weight:bold;font-size:15px;margin-top:15px;cursor:pointer;text-align:center;text-decoration:none}
+button:disabled{opacity:.55;cursor:not-allowed}
+.secondary{background:#222}
 #status{margin-top:15px;font-size:14px;line-height:1.6;overflow-wrap:anywhere}
+.progress{height:9px;background:#e8edf4;border-radius:20px;overflow:hidden;margin-top:12px}
+#progressBar{height:100%;width:0;background:#087cff;transition:width .3s}
+.historyItem{padding:12px 0;border-bottom:1px solid #eee;overflow-wrap:anywhere}
+.historyItem:last-child{border-bottom:0}
+.small{font-size:12px;color:#666;margin-top:5px}
 </style>
 </head>
-
 <body>
 <div class="container">
 <header>
@@ -50,12 +54,7 @@ button:disabled{opacity:.6}
 
 <div class="section active" id="html">
 <label>Paste HTML Code</label>
-<textarea id="htmlCode" placeholder="<!DOCTYPE html>
-<html>
-<body>
-<h1>Hello World!</h1>
-</body>
-</html>"></textarea>
+<textarea id="htmlCode" placeholder="Paste your complete HTML code"></textarea>
 </div>
 
 <div class="section" id="file">
@@ -66,7 +65,7 @@ button:disabled{opacity:.6}
 <div class="section" id="zip">
 <label>Select Website ZIP</label>
 <input id="zipFile" type="file" accept=".zip,application/zip">
-<p class="note">ZIP में index.html और आपकी CSS, JavaScript व images होनी चाहिए।</p>
+<p class="note">ZIP में index.html और CSS, JavaScript व images रखें।</p>
 </div>
 
 <div class="section" id="url">
@@ -75,87 +74,232 @@ button:disabled{opacity:.6}
 </div>
 
 <label>Android Package ID</label>
-<input id="packageName" value="com.htmlhub.mywebsite" placeholder="com.example.myapp">
+<input id="packageName" value="com.htmlhub.mywebsite">
 
-<button id="buildBtn">Build APK</button>
-<div id="status" role="status"></div>
-<p class="note">यह फ्रंटएंड है। APK बनाने के लिए इसे आपके GitHub Actions builder से जोड़ना होगा।</p>
+<button id="buildBtn">🚀 Build APK</button>
+
+<div class="progress"><div id="progressBar"></div></div>
+<div id="status" role="status" aria-live="polite">Ready to build.</div>
+<a id="downloadBtn" class="download" hidden>⬇ Download APK</a>
+<p class="note">Build status GitHub Actions से प्राप्त होगा। APK download तभी होगा जब backend download URL लौटाए।</p>
+</div>
+
+<div class="card">
+<h3>📥 APK Download History</h3>
+<button id="historyBtn" class="secondary">Refresh History</button>
+<div id="history"><p class="note">History लोड करने के लिए Refresh History दबाएँ।</p></div>
 </div>
 </div>
 
 <script>
+const SUPABASE_URL = "https://wgylobjcxqmjsutgdhdz.supabase.co";
+const SUPABASE_KEY = "sb_publishable_IfpDVaKbbxem461SnCl9UA_LFwdNOon";
+const APK_FUNCTION_URL = SUPABASE_URL + "/functions/v1/Apk";
+
+const $ = id => document.getElementById(id);
 const modes = document.querySelectorAll(".mode");
-const sections = document.querySelectorAll(".section");
-const statusBox = document.getElementById("status");
 let selectedMode = "html";
+let activeBuildId = null;
+let pollTimer = null;
 
-modes.forEach(function(mode){
-  mode.addEventListener("click",function(){
+function setStatus(message, progress) {
+  $("status").textContent = message;
+  if (typeof progress === "number") {
+    $("progressBar").style.width = Math.max(0,Math.min(100,progress)) + "%";
+  }
+}
+
+async function api(action, data = {}) {
+  const response = await fetch(APK_FUNCTION_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "apikey": SUPABASE_KEY,
+      "Authorization": "Bearer " + SUPABASE_KEY
+    },
+    body: JSON.stringify({ action, ...data })
+  });
+
+  const result = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    throw new Error(result.error || result.message || "API error: " + response.status);
+  }
+  if (result.error) throw new Error(result.error);
+  return result;
+}
+
+modes.forEach(mode => {
+  mode.addEventListener("click", () => {
     selectedMode = mode.dataset.mode;
-
-    modes.forEach(function(item){
-      item.classList.remove("active");
+    modes.forEach(item => item.classList.toggle("active", item === mode));
+    document.querySelectorAll(".section").forEach(section => {
+      section.classList.toggle("active", section.id === selectedMode);
     });
-
-    sections.forEach(function(section){
-      section.classList.remove("active");
-    });
-
-    mode.classList.add("active");
-    document.getElementById(selectedMode).classList.add("active");
-    statusBox.textContent = "";
+    $("downloadBtn").hidden = true;
+    setStatus("Ready to build.", 0);
   });
 });
 
-document.getElementById("buildBtn").addEventListener("click",function(){
-  const appName = document.getElementById("appName").value.trim();
-  const packageName = document.getElementById("packageName").value.trim();
-
-  if(!appName){
-    statusBox.textContent = "Please enter an app name.";
-    return;
+async function getSource() {
+  if (selectedMode === "html") {
+    const html = $("htmlCode").value.trim();
+    if (!html) throw new Error("Please paste your HTML code.");
+    return { source_type: "html", html_code: html };
   }
 
-  if(!/^[a-zA-Z][a-zA-Z0-9_]*(\.[a-zA-Z][a-zA-Z0-9_]*)+$/.test(packageName)){
-    statusBox.textContent = "Enter a valid package ID, e.g. com.example.myapp";
-    return;
+  if (selectedMode === "url") {
+    const value = $("websiteUrl").value.trim();
+    let parsed;
+    try { parsed = new URL(value); }
+    catch { throw new Error("Enter a valid website URL."); }
+    if (parsed.protocol !== "https:") {
+      throw new Error("Please use an HTTPS URL.");
+    }
+    return { source_type: "url", website_url: value };
   }
 
-  if(selectedMode === "html" &&
-     !document.getElementById("htmlCode").value.trim()){
-    statusBox.textContent = "Please paste your HTML code.";
-    return;
+  const fileInput = selectedMode === "file" ? $("htmlFile") : $("zipFile");
+  const file = fileInput.files[0];
+  if (!file) throw new Error("Please select a file.");
+
+  // File bytes must be uploaded to your Supabase Storage by the backend.
+  // This request sends the file as base64 to the Edge Function.
+  const base64 = await new Promise((resolve,reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result).split(",")[1]);
+    reader.onerror = () => reject(new Error("Could not read the file."));
+    reader.readAsDataURL(file);
+  });
+
+  return {
+    source_type: selectedMode,
+    file_name: file.name,
+    file_base64: base64
+  };
+}
+
+$("buildBtn").addEventListener("click", async () => {
+  if (pollTimer) clearInterval(pollTimer);
+  $("downloadBtn").hidden = true;
+
+  const appName = $("appName").value.trim();
+  const packageName = $("packageName").value.trim();
+
+  if (!appName) return setStatus("Please enter an app name.", 0);
+  if (!/^[a-zA-Z][a-zA-Z0-9_]*(\.[a-zA-Z][a-zA-Z0-9_]*)+$/.test(packageName)) {
+    return setStatus("Enter a valid Android package ID.", 0);
   }
 
-  if(selectedMode === "file" &&
-     !document.getElementById("htmlFile").files.length){
-    statusBox.textContent = "Please select an HTML file.";
-    return;
+  $("buildBtn").disabled = true;
+  setStatus("Preparing build request…", 5);
+
+  try {
+    const source = await getSource();
+    setStatus("Sending build request…", 10);
+
+    const result = await api("start", {
+      app_name: appName,
+      package_name: packageName,
+      ...source
+    });
+
+    activeBuildId = result.build_id || result.id || result.run_id;
+    if (!activeBuildId) {
+      throw new Error("Backend did not return build_id. Check the Apk Edge Function API.");
+    }
+
+    setStatus("Build started. Waiting for GitHub Actions…", 15);
+    await checkBuildStatus();
+    pollTimer = setInterval(checkBuildStatus, 5000);
+
+  } catch (error) {
+    setStatus("❌ " + error.message, 0);
+    $("buildBtn").disabled = false;
   }
+});
 
-  if(selectedMode === "zip" &&
-     !document.getElementById("zipFile").files.length){
-    statusBox.textContent = "Please select a ZIP file.";
-    return;
+async function checkBuildStatus() {
+  if (!activeBuildId) return;
+
+  try {
+    const result = await api("status", { build_id: activeBuildId });
+    const state = String(result.status || result.conclusion || "running").toLowerCase();
+
+    if (["success","completed","complete","successful"].includes(state) &&
+        (result.apk_url || result.download_url)) {
+      clearInterval(pollTimer);
+      pollTimer = null;
+      setStatus("✅ APK build successful!", 100);
+      $("downloadBtn").href = result.apk_url || result.download_url;
+      $("downloadBtn").download = "";
+      $("downloadBtn").hidden = false;
+      $("buildBtn").disabled = false;
+      loadHistory();
+    } else if (["failure","failed","error","cancelled"].includes(state)) {
+      clearInterval(pollTimer);
+      pollTimer = null;
+      setStatus("❌ Build failed: " + (result.message || state), 0);
+      $("buildBtn").disabled = false;
+    } else {
+      const progress = Number(result.progress);
+      setStatus("⏳ Build status: " + state + (result.message ? " — " + result.message : ""), 
+        Number.isFinite(progress) ? progress : 35);
+    }
+  } catch (error) {
+    clearInterval(pollTimer);
+    pollTimer = null;
+    setStatus("Status check failed: " + error.message, 0);
+    $("buildBtn").disabled = false;
   }
+}
 
-  if(selectedMode === "url"){
-    const url = document.getElementById("websiteUrl").value.trim();
+$("historyBtn").addEventListener("click", loadHistory);
 
-    try{
-      if(new URL(url).protocol !== "https:"){
-        statusBox.textContent = "Please use an HTTPS website URL.";
-        return;
-      }
-    }catch(error){
-      statusBox.textContent = "Please enter a valid website URL.";
+async function loadHistory() {
+  $("history").textContent = "Loading history…";
+
+  try {
+    const result = await api("history");
+    const items = result.items || result.history || [];
+
+    $("history").replaceChildren();
+
+    if (!items.length) {
+      $("history").textContent = "No APK history returned.";
       return;
     }
-  }
 
-  statusBox.textContent =
-    "Input validated. Next, connect this form to the GitHub Actions APK builder to start a real build.";
-});
+    items.forEach(item => {
+      const row = document.createElement("div");
+      row.className = "historyItem";
+
+      const title = document.createElement("strong");
+      title.textContent = item.app_name || item.name || "APK Build";
+      row.appendChild(title);
+
+      const detail = document.createElement("p");
+      detail.className = "small";
+      detail.textContent = (item.status || "Unknown") +
+        (item.created_at ? " · " + new Date(item.created_at).toLocaleString() : "");
+      row.appendChild(detail);
+
+      const link = item.apk_url || item.download_url;
+      if (link) {
+        const a = document.createElement("a");
+        a.className = "download";
+        a.href = link;
+        a.textContent = "⬇ Download APK";
+        a.target = "_blank";
+        a.rel = "noopener";
+        row.appendChild(a);
+      }
+      $("history").appendChild(row);
+    });
+  } catch (error) {
+    $("history").textContent = "History error: " + error.message;
+  }
+}
 </script>
 </body>
 </html>
