@@ -322,12 +322,10 @@ jobs:
 
           with open(apk_path, "rb") as f:
               data = f.read()
-
           url = (
-              base
-              + "/storage/v1/object/apk-files/website-apk/website-app.apk"
-          )
-
+                 base
+                   + "/storage/v1/object/html-output/website-app.apk"
+            )
           request = urllib.request.Request(
               url,
               data=data,
